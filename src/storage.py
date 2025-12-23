@@ -50,15 +50,22 @@ class JobStorage:
 
     def filter_new_jobs(self, jobs: list[dict]) -> list[dict]:
         new_jobs = []
+        seen_in_batch = set()  # Dedupe within current batch
+
         for job in jobs:
             job_id = self.generate_job_id(
                 job.get("job_url", ""),
                 job.get("company", ""),
                 job.get("title", ""),
             )
-            if not self.is_seen(job_id):
-                job["_job_id"] = job_id
-                new_jobs.append(job)
+            # Skip if already in this batch or in database
+            if job_id in seen_in_batch or self.is_seen(job_id):
+                continue
+
+            seen_in_batch.add(job_id)
+            job["_job_id"] = job_id
+            new_jobs.append(job)
+
         return new_jobs
 
     def mark_jobs_seen(self, jobs: list[dict]):

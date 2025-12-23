@@ -38,7 +38,7 @@ class JoobleClient:
         }
 
         try:
-            logger.info(f"Jooble: searching '{keywords}' in {location}")
+            logger.debug(f"Jooble: searching '{keywords}'")
             response = requests.post(
                 self.url,
                 json=payload,
@@ -49,13 +49,10 @@ class JoobleClient:
             data = response.json()
 
             jobs = data.get("jobs", [])
-            total = data.get("totalCount", 0)
-            logger.info(f"Jooble: found {len(jobs)} jobs (total: {total})")
-
             return [self._normalize_job(job) for job in jobs]
 
         except requests.exceptions.RequestException as e:
-            logger.error(f"Jooble API error: {e}")
+            logger.warning(f"Jooble API error: {e}")
             return []
 
     def _normalize_job(self, job: dict) -> dict:
