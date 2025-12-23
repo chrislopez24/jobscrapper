@@ -30,7 +30,7 @@ sites:
 # Scraping settings
 results_per_search: 25
 hours_old: 24
-interval_hours: 5
+interval_hours: 6
 
 # Filters - only notify if job passes these filters
 # Title must contain at least one of these words (case-insensitive)
