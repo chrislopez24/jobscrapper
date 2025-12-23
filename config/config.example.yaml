@@ -19,10 +19,13 @@ searches:
     remote: true
     country: "spain"
 
-# Job sites to scrape
+# Job sites to scrape (JobSpy)
 sites:
   - linkedin
   - indeed
+
+# Jooble API (optional - get key at https://jooble.org/api/about)
+# jooble_api_key: "your-api-key-here"
 
 # Scraping settings
 results_per_search: 25
