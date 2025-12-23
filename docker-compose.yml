@@ -1,0 +1,13 @@
+services:
+  job-scrapper:
+    image: ghcr.io/${GITHUB_REPOSITORY:-local}/job-scrapper:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: job-scrapper
+    restart: unless-stopped
+    volumes:
+      - ./config/config.yaml:/app/config/config.yaml:ro
+      - ./data:/app/data
+    environment:
+      - TZ=Europe/Madrid

@@ -1,0 +1,60 @@
+# Job Scrapper Configuration
+
+# Search queries - add as many as you need
+searches:
+  - term: "Product Designer"
+    location: "Spain"
+    remote: true
+    country: "spain"
+  - term: "Senior Product Designer"
+    location: "Spain"
+    remote: true
+    country: "spain"
+  - term: "UX UI Designer"
+    location: "Spain"
+    remote: true
+    country: "spain"
+  - term: "Senior UX Designer"
+    location: "Spain"
+    remote: true
+    country: "spain"
+
+# Job sites to scrape
+sites:
+  - linkedin
+  - indeed
+  - glassdoor
+
+# Scraping settings
+results_per_search: 25
+hours_old: 24
+interval_hours: 5
+
+# Database path (relative to app root)
+db_path: "data/jobs.db"
+
+# Rate limits per site (tune these if you hit 429s)
+rate_limits:
+  linkedin:
+    delay: 2.0
+    max_retries: 3
+    backoff: 2
+  indeed:
+    delay: 1.0
+    max_retries: 3
+    backoff: 2
+  glassdoor:
+    delay: 1.5
+    max_retries: 3
+    backoff: 2
+
+# Apprise notification URLs
+# See: https://github.com/caronc/apprise/wiki
+# Examples:
+#   Discord: discord://webhook_id/webhook_token
+#   Telegram: tgram://bot_token/chat_id
+#   Slack: slack://token_a/token_b/token_c/channel
+#   Email: mailto://user:pass@gmail.com
+apprise_urls:
+  # - "discord://webhook_id/webhook_token"
+  # - "tgram://bot_token/chat_id"

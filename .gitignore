@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+.env
+
+# Data
+data/
+*.db
+
+# Config (keep example only)
+config/config.yaml
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# uv
+uv.lock
