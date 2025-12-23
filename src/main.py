@@ -50,6 +50,7 @@ def scrape_and_notify(
         title_must_contain=config.get("title_must_contain"),
         location_exclude=config.get("location_exclude"),
         remote_only=config.get("remote_only", False),
+        spain_only=config.get("spain_only", False),
     )
     logger.info(f"{source}: {len(jobs)} after filters")
 

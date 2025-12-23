@@ -25,6 +25,31 @@ REMOTE_KEYWORDS = [
     "wfh",
 ]
 
+SPAIN_KEYWORDS = [
+    "spain",
+    "españa",
+    "kingdom of spain",
+    "madrid",
+    "barcelona",
+    "valencia",
+    "sevilla",
+    "bilbao",
+    "málaga",
+    "malaga",
+    "zaragoza",
+    "murcia",
+    "palma",
+    "las palmas",
+    "alicante",
+    "córdoba",
+    "cordoba",
+    "valladolid",
+    "gijón",
+    "gijon",
+    "granada",
+    ", es",
+]
+
 
 def _is_remote(job: dict) -> bool:
     """Check if job is remote based on title, location, or description."""
@@ -36,25 +61,36 @@ def _is_remote(job: dict) -> bool:
     return any(kw in text for kw in REMOTE_KEYWORDS)
 
 
+def _is_spain(job: dict) -> bool:
+    """Check if job is in Spain based on location or description."""
+    location = _clean_str(job.get("location"))
+    description = _clean_str(job.get("description"))
+
+    text = f"{location} {description}"
+    return any(kw in text for kw in SPAIN_KEYWORDS)
+
+
 def filter_jobs(
     jobs: list[dict],
     title_must_contain: list[str] | None = None,
     location_exclude: list[str] | None = None,
     remote_only: bool = False,
+    spain_only: bool = False,
 ) -> list[dict]:
     """
-    Filter jobs based on title keywords, location exclusions, and remote flag.
+    Filter jobs based on title keywords, location, remote, and country.
 
     Args:
         jobs: List of job dicts from scraper
         title_must_contain: Job title must contain at least one of these (case-insensitive)
         location_exclude: Exclude jobs with location containing any of these (case-insensitive)
         remote_only: Only include jobs that appear to be remote
+        spain_only: Only include jobs that appear to be in Spain
 
     Returns:
         Filtered list of jobs
     """
-    if not title_must_contain and not location_exclude and not remote_only:
+    if not title_must_contain and not location_exclude and not remote_only and not spain_only:
         return jobs
 
     title_keywords = [kw.lower() for kw in (title_must_contain or [])]
@@ -64,6 +100,7 @@ def filter_jobs(
     excluded_title = 0
     excluded_location = 0
     excluded_not_remote = 0
+    excluded_not_spain = 0
 
     for job in jobs:
         title = _clean_str(job.get("title"))
@@ -83,6 +120,13 @@ def filter_jobs(
                 logger.debug(f"Excluded by location: {job.get('title')} @ {job.get('location')}")
                 continue
 
+        # Check Spain only
+        if spain_only:
+            if not _is_spain(job):
+                excluded_not_spain += 1
+                logger.debug(f"Excluded (not Spain): {job.get('title')} @ {job.get('location')}")
+                continue
+
         # Check remote only
         if remote_only:
             if not _is_remote(job):
@@ -92,11 +136,10 @@ def filter_jobs(
 
         filtered.append(job)
 
-    if excluded_title or excluded_location or excluded_not_remote:
+    if excluded_title or excluded_location or excluded_not_remote or excluded_not_spain:
         logger.info(
-            f"Filtered out {excluded_title} by title, "
-            f"{excluded_location} by location, "
-            f"{excluded_not_remote} not remote"
+            f"Filtered: {excluded_title} title, {excluded_location} location, "
+            f"{excluded_not_spain} not Spain, {excluded_not_remote} not remote"
         )
 
     return filtered

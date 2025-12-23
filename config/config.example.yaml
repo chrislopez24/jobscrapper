@@ -33,8 +33,9 @@ hours_old: 24
 interval_hours: 4          # LinkedIn/Indeed interval
 jooble_interval_hours: 6   # Jooble interval (500 req/month limit)
 
-# Only show remote jobs
-remote_only: true
+# Filters
+remote_only: false   # Set true to filter jobs mentioning "remote"
+spain_only: true     # Only jobs in Spain
 
 # Filters - only notify if job passes these filters
 # Title must contain at least one of these words (case-insensitive)
