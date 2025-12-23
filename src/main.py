@@ -13,10 +13,9 @@ from src.jooble import JoobleClient
 
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-    ],
+    format="%(asctime)s %(message)s",
+    datefmt="%H:%M:%S",
+    handlers=[logging.StreamHandler(sys.stdout)],
 )
 logger = logging.getLogger(__name__)
 
@@ -24,25 +23,26 @@ logger = logging.getLogger(__name__)
 def load_config(path: str = "config/config.yaml") -> dict:
     config_path = Path(path)
     if not config_path.exists():
-        logger.error(f"Config file not found: {path}")
+        logger.error(f"Config not found: {path}")
         sys.exit(1)
 
     with open(config_path) as f:
         return yaml.safe_load(f)
 
 
-def scrape_and_notify(
+def process_jobs(
     jobs: list[dict],
     config: dict,
     storage: JobStorage,
     notifier: JobNotifier,
     source: str,
-):
-    """Filter, dedupe, and notify for a batch of jobs."""
+    linkedin_429: bool = False,
+) -> str:
+    """Filter, dedupe, and notify. Returns summary string."""
     if not jobs:
-        return
+        return f"{source}: 0 scraped"
 
-    logger.info(f"{source}: {len(jobs)} jobs scraped")
+    scraped = len(jobs)
 
     # Apply filters
     jobs = filter_jobs(
@@ -52,33 +52,39 @@ def scrape_and_notify(
         remote_only=config.get("remote_only", False),
         spain_only=config.get("spain_only", False),
     )
-    logger.info(f"{source}: {len(jobs)} after filters")
+    filtered = len(jobs)
 
     # Dedupe
     new_jobs = storage.filter_new_jobs(jobs)
-    logger.info(f"{source}: {len(new_jobs)} new jobs")
+    new_count = len(new_jobs)
+
+    # Build summary
+    summary = f"{source}: {scraped} → {filtered} → {new_count} new"
 
     if new_jobs:
         storage.mark_jobs_seen(new_jobs)
-        notifier.notify(new_jobs)
+        if notifier.notify(new_jobs, linkedin_429=linkedin_429):
+            summary += " ✓"
+        else:
+            summary += " (notify failed)"
+
+    if linkedin_429:
+        summary += " [429]"
+
+    return summary
 
 
 def main():
     config = load_config()
 
-    rate_limits = config.get("rate_limits")
-    scraper = JobScraper(rate_limits=rate_limits)
-
+    scraper = JobScraper(rate_limits=config.get("rate_limits"))
     storage = JobStorage(db_path=config.get("db_path", "data/jobs.db"))
+    notifier = JobNotifier(apprise_urls=config.get("apprise_urls", []))
 
-    apprise_urls = config.get("apprise_urls", [])
-    notifier = JobNotifier(apprise_urls=apprise_urls)
-
-    # Initialize Jooble if API key is configured
     jooble_api_key = config.get("jooble_api_key")
     jooble = JoobleClient(jooble_api_key) if jooble_api_key else None
 
-    # Intervals (in seconds)
+    # Intervals
     jobspy_interval = config.get("interval_hours", 4) * 3600
     jooble_interval = config.get("jooble_interval_hours", 6) * 3600
 
@@ -87,51 +93,57 @@ def main():
     results_wanted = config.get("results_per_search", 25)
     hours_old = config.get("hours_old", 24)
 
-    logger.info(f"Job Scrapper started")
-    logger.info(f"Searches: {len(searches)}")
-    logger.info(f"JobSpy sites: {sites} (every {jobspy_interval // 3600}h)")
+    sources = []
+    if sites:
+        sources.append(f"JobSpy({','.join(sites)}) every {jobspy_interval//3600}h")
     if jooble:
-        logger.info(f"Jooble: enabled (every {jooble_interval // 3600}h)")
+        sources.append(f"Jooble every {jooble_interval//3600}h")
 
-    # Track last run times
+    logger.info(f"Started | {len(searches)} searches | {' | '.join(sources)}")
+
     last_jobspy_run = 0
     last_jooble_run = 0
 
     while True:
         now = time.time()
 
-        # Run JobSpy if interval elapsed
+        # JobSpy
         if sites and (now - last_jobspy_run >= jobspy_interval):
             try:
-                logger.info("Running JobSpy (LinkedIn, Indeed)...")
                 jobs = scraper.scrape_searches(
                     searches=searches,
                     sites=sites,
                     results_wanted=results_wanted,
                     hours_old=hours_old,
                 )
-                scrape_and_notify(jobs, config, storage, notifier, "JobSpy")
+                summary = process_jobs(
+                    jobs, config, storage, notifier, "JobSpy",
+                    linkedin_429=scraper.linkedin_429,
+                )
+                logger.info(summary)
                 last_jobspy_run = now
             except Exception as e:
-                logger.error(f"JobSpy error: {e}", exc_info=True)
+                logger.error(f"JobSpy error: {e}")
 
-        # Run Jooble if interval elapsed
+        # Jooble
         if jooble and (now - last_jooble_run >= jooble_interval):
             try:
-                logger.info("Running Jooble...")
                 jobs = jooble.search_multiple(
                     searches=searches,
                     results_per_search=results_wanted,
                 )
-                scrape_and_notify(jobs, config, storage, notifier, "Jooble")
+                summary = process_jobs(jobs, config, storage, notifier, "Jooble")
+                logger.info(summary)
                 last_jooble_run = now
             except Exception as e:
-                logger.error(f"Jooble error: {e}", exc_info=True)
+                logger.error(f"Jooble error: {e}")
 
-        # Cleanup old jobs periodically
-        storage.cleanup_old(days=30)
+        # Cleanup old jobs (silent, only logs on error)
+        try:
+            storage.cleanup_old(days=30)
+        except Exception as e:
+            logger.error(f"Cleanup error: {e}")
 
-        # Sleep for 1 minute between checks
         time.sleep(60)
 
 

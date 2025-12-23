@@ -3,7 +3,6 @@ import logging
 from typing import Any
 
 from jobspy import scrape_jobs
-import pandas as pd
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +18,7 @@ DEFAULT_RATE_LIMITS = {
 class JobScraper:
     def __init__(self, rate_limits: dict[str, dict] | None = None):
         self.rate_limits = rate_limits or DEFAULT_RATE_LIMITS
+        self.linkedin_429 = False
 
     def _get_rate_limit(self, site: str) -> dict:
         return self.rate_limits.get(site, {"delay": 1.0, "max_retries": 3, "backoff": 2})
@@ -40,7 +40,7 @@ class JobScraper:
 
         for attempt in range(max_retries):
             try:
-                logger.info(f"Scraping {site} for '{search_term}' in {location}")
+                logger.debug(f"{site}: searching '{search_term}'")
 
                 df = scrape_jobs(
                     site_name=[site],
@@ -52,24 +52,23 @@ class JobScraper:
                     country_indeed=country,
                 )
 
+                time.sleep(delay)
+
                 if df is None or df.empty:
-                    logger.info(f"No results from {site}")
                     return []
 
-                jobs = df.to_dict("records")
-                logger.info(f"Found {len(jobs)} jobs from {site}")
-
-                time.sleep(delay)
-                return jobs
+                return df.to_dict("records")
 
             except Exception as e:
                 error_msg = str(e).lower()
                 if "429" in error_msg or "rate" in error_msg:
+                    if site == "linkedin":
+                        self.linkedin_429 = True
                     wait_time = delay * (backoff ** attempt)
-                    logger.warning(f"Rate limited on {site}, waiting {wait_time}s")
+                    logger.warning(f"{site}: 429 rate limit, retry {attempt+1}/{max_retries}")
                     time.sleep(wait_time)
                 else:
-                    logger.error(f"Error scraping {site}: {e}")
+                    logger.debug(f"{site}: error - {e}")
                     if attempt == max_retries - 1:
                         return []
                     time.sleep(delay)
@@ -114,6 +113,7 @@ class JobScraper:
         hours_old: int = 24,
     ) -> list[dict]:
         all_jobs = []
+        self.linkedin_429 = False
 
         for search in searches:
             jobs = self.scrape_all(
