@@ -5,8 +5,9 @@ logger = logging.getLogger(__name__)
 
 
 class JobNotifier:
-    def __init__(self, apprise_urls: list[str]):
+    def __init__(self, apprise_urls: list[str] | None = None):
         self.apprise = apprise.Apprise()
+        apprise_urls = apprise_urls or []
         for url in apprise_urls:
             self.apprise.add(url)
         self.enabled = len(apprise_urls) > 0
