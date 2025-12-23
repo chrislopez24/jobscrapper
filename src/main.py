@@ -8,6 +8,7 @@ import yaml
 from src.scraper import JobScraper
 from src.storage import JobStorage
 from src.notifier import JobNotifier
+from src.filters import filter_jobs
 
 logging.basicConfig(
     level=logging.INFO,
@@ -45,6 +46,14 @@ def run_once(config: dict, scraper: JobScraper, storage: JobStorage, notifier: J
     )
 
     logger.info(f"Total jobs scraped: {len(all_jobs)}")
+
+    # Apply filters
+    all_jobs = filter_jobs(
+        all_jobs,
+        title_must_contain=config.get("title_must_contain"),
+        location_exclude=config.get("location_exclude"),
+    )
+    logger.info(f"Jobs after filtering: {len(all_jobs)}")
 
     new_jobs = storage.filter_new_jobs(all_jobs)
     logger.info(f"New jobs found: {len(new_jobs)}")

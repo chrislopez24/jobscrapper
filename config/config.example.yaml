@@ -30,6 +30,23 @@ results_per_search: 25
 hours_old: 24
 interval_hours: 5
 
+# Filters - only notify if job passes these filters
+# Title must contain at least one of these words (case-insensitive)
+title_must_contain:
+  - designer
+  - design
+  - UX
+  - UI
+
+# Exclude jobs with location containing any of these (case-insensitive)
+location_exclude:
+  - "New York"
+  - "California"
+  - "Texas"
+  - "United States"
+  - ", US"
+  - "USA"
+
 # Database path (relative to app root)
 db_path: "data/jobs.db"
 

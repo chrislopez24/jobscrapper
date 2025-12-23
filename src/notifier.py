@@ -1,7 +1,20 @@
 import logging
+import math
 import apprise
 
 logger = logging.getLogger(__name__)
+
+
+def _clean_value(value) -> str | None:
+    """Clean pandas NaN and empty values."""
+    if value is None:
+        return None
+    if isinstance(value, float) and math.isnan(value):
+        return None
+    val = str(value).strip()
+    if val.lower() in ("nan", "none", ""):
+        return None
+    return val
 
 
 class JobNotifier:
@@ -13,35 +26,63 @@ class JobNotifier:
         self.enabled = len(apprise_urls) > 0
 
     def _format_job(self, job: dict) -> str:
-        title = job.get("title", "Unknown")
-        company = job.get("company", "Unknown")
-        location = job.get("location", "")
-        url = job.get("job_url", "")
-        site = job.get("site", "")
+        title = _clean_value(job.get("title")) or "Unknown Position"
+        company = _clean_value(job.get("company")) or "Unknown Company"
+        location = _clean_value(job.get("location"))
+        url = _clean_value(job.get("job_url")) or ""
+        site = _clean_value(job.get("site")) or ""
 
         salary_min = job.get("min_amount")
         salary_max = job.get("max_amount")
-        currency = job.get("currency", "EUR")
+        currency = _clean_value(job.get("currency")) or "EUR"
 
-        salary = ""
-        if salary_min and salary_max:
-            salary = f"\n   Salary: {salary_min:,.0f} - {salary_max:,.0f} {currency}"
-        elif salary_min:
-            salary = f"\n   Salary: {salary_min:,.0f}+ {currency}"
+        # Build job line
+        parts = []
 
-        return f"**{title}**\n   {company} | {location}{salary}\n   [{site}]({url})"
+        # Title with link
+        if url:
+            parts.append(f"**[{title}]({url})**")
+        else:
+            parts.append(f"**{title}**")
+
+        # Company and location
+        info = [company]
+        if location:
+            info.append(location)
+        parts.append(" | ".join(info))
+
+        # Salary if available
+        if salary_min and not (isinstance(salary_min, float) and math.isnan(salary_min)):
+            if salary_max and not (isinstance(salary_max, float) and math.isnan(salary_max)):
+                parts.append(f"{salary_min:,.0f} - {salary_max:,.0f} {currency}")
+            else:
+                parts.append(f"{salary_min:,.0f}+ {currency}")
+
+        return "\n".join(parts)
 
     def _format_message(self, jobs: list[dict]) -> str:
         if not jobs:
             return ""
 
-        lines = [f"**{len(jobs)} new job(s) found:**\n"]
-        for job in jobs[:10]:  # Limit to 10 per notification
-            lines.append(self._format_job(job))
-            lines.append("")
+        # Group by site
+        by_site: dict[str, list[dict]] = {}
+        for job in jobs:
+            site = _clean_value(job.get("site")) or "other"
+            by_site.setdefault(site, []).append(job)
 
-        if len(jobs) > 10:
-            lines.append(f"_...and {len(jobs) - 10} more_")
+        lines = []
+
+        for site, site_jobs in by_site.items():
+            lines.append(f"**{site.upper()}** ({len(site_jobs)})")
+            lines.append("─" * 20)
+
+            for job in site_jobs[:5]:  # Max 5 per site
+                lines.append(self._format_job(job))
+                lines.append("")
+
+            if len(site_jobs) > 5:
+                lines.append(f"_+{len(site_jobs) - 5} more from {site}_")
+                lines.append("")
 
         return "\n".join(lines)
 
@@ -55,7 +96,7 @@ class JobNotifier:
             return False
 
         message = self._format_message(jobs)
-        title = f"Job Alert: {len(jobs)} new position(s)"
+        title = f"New Jobs Found: {len(jobs)}"
 
         try:
             result = self.apprise.notify(
