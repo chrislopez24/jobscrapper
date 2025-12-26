@@ -123,6 +123,39 @@ class JobNotifier:
 
         return "\n".join(lines).strip()
 
+    def _chunk_jobs(self, jobs: list[dict], max_chars: int = 1800) -> list[list[dict]]:
+        """Split jobs into chunks that fit within character limit."""
+        chunks = []
+        current_chunk = []
+        current_len = 0
+
+        for job in jobs:
+            job_text = self._format_job_compact(job)
+            job_len = len(job_text) + 1  # +1 for newline
+
+            # If single job exceeds limit, it goes alone
+            if job_len > max_chars:
+                if current_chunk:
+                    chunks.append(current_chunk)
+                    current_chunk = []
+                    current_len = 0
+                chunks.append([job])
+                continue
+
+            # If adding this job exceeds limit, start new chunk
+            if current_len + job_len > max_chars:
+                chunks.append(current_chunk)
+                current_chunk = [job]
+                current_len = job_len
+            else:
+                current_chunk.append(job)
+                current_len += job_len
+
+        if current_chunk:
+            chunks.append(current_chunk)
+
+        return chunks
+
     def notify(self, jobs: list[dict], linkedin_429: bool = False) -> bool:
         if not jobs:
             return True
@@ -131,23 +164,35 @@ class JobNotifier:
             logger.warning("Notifications disabled: no Apprise URLs configured")
             return False
 
-        message = self._format_message(jobs)
-        title = f"{len(jobs)} New Jobs"
-        if linkedin_429:
-            title += " ⚠️ LinkedIn 429"
+        chunks = self._chunk_jobs(jobs)
+        total_chunks = len(chunks)
+        all_success = True
 
-        try:
-            result = self.apprise.notify(
-                title=title,
-                body=message,
-                body_format=apprise.NotifyFormat.MARKDOWN,
-            )
-            if not result:
-                logger.error("Notification delivery failed")
-            return result
-        except Exception as e:
-            logger.error(f"Notification error: {e}")
-            return False
+        for i, chunk in enumerate(chunks, 1):
+            message = self._format_message(chunk)
+
+            if total_chunks == 1:
+                title = f"{len(jobs)} New Jobs"
+            else:
+                title = f"New Jobs ({i}/{total_chunks})"
+
+            if linkedin_429 and i == 1:
+                title += " ⚠️ LinkedIn 429"
+
+            try:
+                result = self.apprise.notify(
+                    title=title,
+                    body=message,
+                    body_format=apprise.NotifyFormat.MARKDOWN,
+                )
+                if not result:
+                    logger.error(f"Notification delivery failed (chunk {i}/{total_chunks})")
+                    all_success = False
+            except Exception as e:
+                logger.error(f"Notification error (chunk {i}/{total_chunks}): {e}")
+                all_success = False
+
+        return all_success
 
     def test(self) -> bool:
         return self.apprise.notify(
